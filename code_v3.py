@@ -46,7 +46,8 @@ Forecast_nb = 16 # 16 * 3 hours = 2 days
 update_freq = 15 # number of seconds between update cycle in infinite loop
 displayed_time_update_freq = 60 # number of seconds between displayed time update
 weather_update_freq = 300 # number of seconds between weather (and internet time) API requests
-attempts = 3  # Number of attempts to retry each request before raising error
+attempts = 10  # Number of attempts to retry each request before raising error
+error_delay = 10 # Number of seconds to wait before retrying after error
 
 cwd = ('/'+__file__).rsplit('/', 1)[0]  # the current working directory (where this file is)
 
@@ -68,15 +69,16 @@ print('-'*40)
 print('Connecting to WIFI...')
 print('-'*40, '\n')
 
-while not esp.is_connected:
-    try:
-        time.sleep(1)
-        esp.connect_AP(secrets['ssid'], secrets['password'])
-    except RuntimeError as e:
-        print('Could not connect to WIFI, retrying: ', e)
-        continue
-print('Connected to', str(esp.ssid, 'utf-8'), '\tRSSI:', esp.rssi, '   IP address is', esp.pretty_ip(esp.ip_address), '\n')
-
+def connect_to_wifi():
+    while not esp.is_connected:
+        try:
+            time.sleep(1)
+            esp.connect_AP(secrets['ssid'], secrets['password'])
+        except RuntimeError as e:
+            print('Could not connect to WIFI, retrying: ', e)
+            continue
+    print('Connected to', str(esp.ssid, 'utf-8'), '\tRSSI:', esp.rssi, '   IP address is', esp.pretty_ip(esp.ip_address), '\n')
+connect_to_wifi()
 if esp.status == adafruit_esp32spi.WL_IDLE_STATUS:
     print('\nPYPORTAL found and in idle mode')
 
@@ -279,7 +281,7 @@ def update_internet_time(): # Get INTERNET TIME from adafruit server
 
     while not time_response:
         try:
-            time_response = requests.get(api_url)
+            time_response = requests.get(api_url, timeout=10)
 
             if esp._debug:
                 print('Time request: ', api_url)
@@ -294,10 +296,13 @@ def update_internet_time(): # Get INTERNET TIME from adafruit server
         except KeyError:
             raise KeyError("Was unable to update the time, try setting secrets['timezone'] according to http://worldtimeapi.org/timezones\n")
 
-        except AssertionError as error:
+        except Exception as error:
             print('Updating time attempt ', internet_time_update_try_count, '/', attempts, ' failed. Retrying...', error)
+            esp.reset()
+            connect_to_wifi()
+            time.sleep(error_delay)
             if internet_time_update_try_count >= attempts:
-                raise AssertionError('Was unable to update time from internet ', attempts, ' times')
+                raise Exception('Was unable to update time from internet ', attempts, ' times')
             continue
 
     year, month, mday = [int(x) for x in the_date.split('-')]
@@ -322,7 +327,8 @@ def update_current_weather(): # update CURRENT wheather
             current_try_count += 1
 
             print('CURRENT WEATHER update attempt ', current_try_count, '/', attempts, '\n')
-            json_weather_data_1_response = requests.get(CURRENT_WEATHER_DATA_SOURCE_1)
+            print(CURRENT_WEATHER_DATA_SOURCE_1)
+            json_weather_data_1_response = requests.get(CURRENT_WEATHER_DATA_SOURCE_1, timeout=10)
             json_weather_data_1 = json_weather_data_1_response.json() # JSON 1
 
             weather_1 = json_weather_data_1['weather'][0]['description']
@@ -351,10 +357,13 @@ def update_current_weather(): # update CURRENT wheather
             group[3] = WIND_text_area
 
             print('CURRENT weather updated succesfully after # ', current_try_count,' attempt', '\n')
-        except AssertionError as error:
+        except Exception as error:
             print('JSON parsing attempt ', current_try_count, '/', attempts, ' failed. Retrying...', error)
+            esp.reset()
+            connect_to_wifi()
+            time.sleep(error_delay)
             if current_try_count >= attempts:
-                raise AssertionError('Current weather update failed ', attempts, ' times')
+                raise Exception('Current weather update failed ', attempts, ' times')
             continue
     json_weather_data_1_response.close()
     json_weather_data_1_response = None
@@ -372,12 +381,15 @@ def update_forecast(): # update FORECAST array and barcharts
         try:
             forecast_try_count += 1
             print('FORECASTS update attempt ', forecast_try_count, '/', attempts, '\n')
-            forecast_data = requests.get(FORECAST_WEATHER_DATA_SOURCE)
+            forecast_data = requests.get(FORECAST_WEATHER_DATA_SOURCE, timeout=10)
             json_forecast_data = forecast_data.json()
-        except AssertionError as error:
+        except Exception as error:
             print('FORECASTS update attempt ', forecast_try_count, '/', attempts, ' failed. Retrying...\n', error)
+            esp.reset()
+            connect_to_wifi()
+            time.sleep(error_delay)
             if forecast_try_count >= attempts:
-                raise AssertionError('FORECASTS update failed ', attempts, ' times')
+                raise Exception('FORECASTS update failed ', attempts, ' times')
             continue
 
     # intermittent errors
