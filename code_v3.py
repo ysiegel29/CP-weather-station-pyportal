@@ -28,8 +28,8 @@ except ImportError:
 # SETTINGS                                  #
 #############################################
 
-WEATHER_LOCATION = 2988507 # 5128581 = NY, 2988507 = Paris
-TZ_offset = 0 # Time difference between WEATHER_LOCATION and GMT
+WEATHER_LOCATION = 1850147 # 1850147 = Tokyo, 5128581 = NY, 2988507 = Paris
+TZ_offset = 9 # Time difference between WEATHER_LOCATION and GMT. TOKYO = 9
 
 sun_min = 0     # %
 sun_max = 100   # %
@@ -42,10 +42,11 @@ rain_max = 5    # mm
 wind_min = 0    # km/h
 wind_max = 30   # km/h
 
-Forecast_nb = 16 # 16 * 3 hours = 2 days
-update_freq = 15 # number of seconds between update cycle in infinite loop
+Forecast_nb = 19 # 16 * 3 hours = 2 days
+update_freq = 5 # number of seconds between update cycle in infinite loop
 displayed_time_update_freq = 60 # number of seconds between displayed time update
 weather_update_freq = 300 # number of seconds between weather (and internet time) API requests
+
 attempts = 10  # Number of attempts to retry each request before raising error
 error_delay = 10 # Number of seconds to wait before retrying after error
 
@@ -199,7 +200,7 @@ def draw_day_line(bottom_left, top_right): # Draw a yellow dotted line at Noon (
     for forecast in range(0, Forecast_nb - 1):
         if TZ(forecast_array[forecast][2].tm_hour) == 21:
             for y in range(2,HEIGHT):
-                BC_bitmap[x_min + (1+forecast)*bar_width, y] = 6
+                BC_bitmap[x_min + (1+forecast)*bar_width, y] = 5
         if TZ(forecast_array[forecast][2].tm_hour) == 9:
             for y in range(2,HEIGHT):
                 if (y % 5) == 0:
@@ -207,6 +208,10 @@ def draw_day_line(bottom_left, top_right): # Draw a yellow dotted line at Noon (
 
 
 def draw_bar_chart(UI_index, UI_min, UI_max, bottom_left, top_right, color): # Draw bar chart for specified UI, with given scale, at given position, with specified color
+    for x in range(bottom_left[0], top_right[0]):
+        for y in range(top_right[1], bottom_left[1]):
+            BC_bitmap[x, y] = 0 # put bar chart area in black
+    
     y_min = top_right[1]
     y_max = bottom_left[1]
     bar_width = int((top_right[0] - bottom_left[0]) / Forecast_nb)
@@ -327,7 +332,6 @@ def update_current_weather(): # update CURRENT wheather
             current_try_count += 1
 
             print('CURRENT WEATHER update attempt ', current_try_count, '/', attempts, '\n')
-            print(CURRENT_WEATHER_DATA_SOURCE_1)
             json_weather_data_1_response = requests.get(CURRENT_WEATHER_DATA_SOURCE_1, timeout=10)
             json_weather_data_1 = json_weather_data_1_response.json() # JSON 1
 
@@ -454,7 +458,7 @@ CURRENT_WEATHER_DATA_SOURCE_1 += '&units=metric&appid='+secrets['openweather_tok
 print('CURRENT weather API URL: ', CURRENT_WEATHER_DATA_SOURCE_1)
 
 FORECAST_WEATHER_DATA_SOURCE = 'http://api.openweathermap.org/data/2.5/forecast?id=' + str(WEATHER_LOCATION)
-FORECAST_WEATHER_DATA_SOURCE += '&units=metric&appid=' + secrets['openweather_token'] + '&cnt=30'  # limiting results
+FORECAST_WEATHER_DATA_SOURCE += '&units=metric&appid=' + secrets['openweather_token'] + '&cnt=40'  # limiting results
 print('FORECASTS weather API URL: ', FORECAST_WEATHER_DATA_SOURCE, '\n')
 
 
@@ -501,8 +505,7 @@ while True:
     print('X Clear memory... Mem free: {:,} allocated: {:,}'.format(gc.mem_free(), gc.mem_alloc()),end='')
     gc.collect()
     print(' | Mem free: {:,} allocated: {:,}'.format(gc.mem_free(), gc.mem_alloc()),end='')
-    print(' | Progress: {:02.0f}'.format(progress), '%', '\n')
-
+    print(' | Progress: {:02.0f}'.format(progress), '%')
 
     # UPDATE DISPLAY
     display.show(group)
